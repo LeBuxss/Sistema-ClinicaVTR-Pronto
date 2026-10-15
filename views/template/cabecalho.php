@@ -1,0 +1,101 @@
+<?php
+/**
+ * Cabecalho com o menu de navegacao.
+ * Incluido pelo template/layout.php.
+ *
+ * Os itens vem de configuracoes/menu.php, que o comando scaffold:crud
+ * atualiza a cada CRUD gerado. As telas de login vem dos providers
+ * instalados por auth:install.
+ */
+
+use Nucleo\Autenticacao;
+use Nucleo\Config;
+
+// Descobre a rota atual para destacar o item do menu.
+$rotaAtual = trim((string) ($_GET['url'] ?? ''), '/');
+$secao     = explode('/', $rotaAtual)[0] ?: '';
+
+$itens = array_values(array_filter(
+    (array) Config::obter('menu', []),
+    function (array $item): bool {
+        $regra = $item['auth'] ?? null;
+
+        $podeVer = match ($regra) {
+            'sim' => Autenticacao::conectados() !== [],
+            'nao' => Autenticacao::conectados() === [],
+            default => true,
+        };
+
+        // 'perfil' => 'admin' (ou uma lista) esconde o item de quem nao tem
+        // esse perfil. E so o menu: quem protege a rota e o exigirPerfil()
+        // no controller.
+        if ($podeVer && isset($item['perfil'])) {
+            $podeVer = tem_perfil($item['perfil'], $item['provider'] ?? null);
+        }
+
+        return $podeVer;
+    }
+));
+
+$conectados = Autenticacao::conectados();
+$providers  = Autenticacao::providers();
+?>
+<header class="cabecalho">
+    <aside class="sidebar offcanvas-lg offcanvas-start" id="menuPrincipal" tabindex="-1">
+        <div class="sidebar__marca">
+            <img class="sidebar__logo" src="<?= asset('imagens/logo-clinicavtr.svg') ?>" alt="">
+            <span><?= e($nomeDoSite ?? 'ClinicaVTR') ?></span>
+        </div>
+        <div class="sidebar__rotulo">Navegacao</div>
+        <nav class="sidebar__menu">
+            <?php foreach ($itens as $item): ?>
+                <?php $rota = trim((string) ($item['rota'] ?? ''), '/'); ?>
+                <?php
+                $iconesMenu = [
+                    '' => '&#8962;',
+                    'clinicavtr' => '&#128100;',
+                    'cadastro' => '&#128203;',
+                    'consulta' => '&#9877;',
+                    'fichavacinal' => '&#128062;',
+                    'home/sobre' => '&#10084;',
+                    'auth/registrar' => '&#128100;',
+                ];
+                $iconeMenu = $iconesMenu[$rota] ?? '&#9632;';
+                ?>
+                <?php $itemAtivo = $rota === ''
+                    ? ($rotaAtual === '' || $secao === 'home')
+                    : ($rotaAtual === $rota || str_starts_with($rotaAtual, $rota . '/')); ?>
+                <a class="sidebar__item <?= $itemAtivo ? 'sidebar__item--ativo' : '' ?>" href="<?= url($rota) ?>">
+                    <span class="sidebar__icone" aria-hidden="true"><?= $iconeMenu ?></span>
+                    <?= e((string) ($item['texto'] ?? $rota)) ?>
+                </a>
+            <?php endforeach ?>
+
+            <?php if ($providers !== []): ?>
+                <div class="sidebar__rotulo">Conta</div>
+            <?php endif ?>
+
+            <?php foreach ($conectados as $provider): ?>
+                <a class="sidebar__item" href="<?= url(Autenticacao::rotaSair($provider)) ?>">
+                    <span class="sidebar__icone">&#8594;</span>
+                    Sair<?= $provider === '' ? '' : ' (' . e($provider) . ')' ?>
+                </a>
+            <?php endforeach ?>
+
+            <?php foreach ($providers as $provider): ?>
+                <?php if (in_array($provider, $conectados, true)) { continue; } ?>
+                <?php if (in_array($provider, ['', 'clinicavtr'], true)) { continue; } ?>
+                <a class="sidebar__item" href="<?= url(Autenticacao::rotaLogin($provider)) ?>">
+                    <span class="sidebar__icone">&#8594;</span>
+                    Entrar (<?= e($provider) ?>)
+                </a>
+            <?php endforeach ?>
+        </nav>
+    </aside>
+    <div class="topbar">
+        <button class="btn btn-outline-primary d-lg-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#menuPrincipal" aria-controls="menuPrincipal">Menu</button>
+        <div class="topbar__titulo"><?= e($titulo ?? 'Painel') ?></div>
+        <div class="topbar__status"><span class="status-ponto"></span> Sistema online</div>
+    </div>
+    <?= parcial('template/barra-pesquisa') ?>
+</header>
